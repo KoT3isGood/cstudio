@@ -1,0 +1,7 @@
+.zig-cache/
+build/
+zig-out/
+
+/first.rbxlx
+/*.rbxlx.lock
+/*.rbxl.lock

@@ -1,0 +1,71 @@
+{
+  "name": "first",
+  "tree": {
+    "$className": "DataModel",
+    "Lighting": {
+      "$properties": {
+        "Outlines": false,
+        "Technology": "Voxel",
+        "Ambient": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "GlobalShadows": true,
+        "Brightness": 2.0
+      }
+    },
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "./common"
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "./server"
+      }
+    },
+    "SoundService": {
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "./src"
+        },
+        "libc": {
+          "$path": "../../libclua"
+        }
+      }
+    },
+    "Workspace": {
+      "Baseplate": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "Size": [
+            512.0,
+            20.0,
+            512.0
+          ],
+          "Position": [
+            0.0,
+            -10.0,
+            0.0
+          ],
+          "Color": [
+            0.38823,
+            0.37254,
+            0.38823
+          ],
+          "Locked": true
+        }
+      },
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    }
+  }
+}
