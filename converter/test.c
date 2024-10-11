@@ -1,9 +1,8 @@
 
-#include "../libc/stdio.h"
+#include "../libc/assert.h"
 
 int main() {
-  FILE* yes = fopen("Workspace/Value","w");
-  const char* text = "123";
-  fwrite(text, 1, 3, yes);
+  short test = 123;
+  assert(0);
   return 65;
 }

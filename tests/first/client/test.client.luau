@@ -1,16 +1,20 @@
 --!native 
-local module = {}
-function module.fopen(filename, mode)
+if not _G.fopen then
+function _G.fopen(filename, mode)
 
 end
-function module.fwrite(buffer, size, count, stream)
+end
+if not _G.fwrite then
+function _G.fwrite(buffer, size, count, stream)
 
 end
-function module.main()
-local yes = fopen("Workspace/Value", "w")
+end
+if not _G.main then
+function _G.main()
+local yes = _G.fopen("Workspace/Value", "w")
 
 local text = "123"
-fwrite(text, 1, 3, yes)
+_G.fwrite(text, 1, 3, yes)
 return 65
 end
-return module
+end
