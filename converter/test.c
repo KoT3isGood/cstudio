@@ -2,7 +2,7 @@
 int main() {
 	int x;
 
-	x = 1000000;
+	x = 1000;
 	while (x)
 		x = x - 1;
 	return x;
