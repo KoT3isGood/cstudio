@@ -1,95 +1,144 @@
 --!native
--- real memory manager
--- locals may save only pointers
-_G.mem = _G.mem or {}
 
+-- optimizations
+math_pow = math.pow
+math_floor = math.floor
 
-_G.stack = 1000
+_G.mem = table.create(10000000, 0);
+_G.stackptr = 1000
+_G.heaptr = 1000000
 
--- we should use better allocation
-_G.heap = 1000000
-
-
-
-function _G.memgetbyte(ptr)
-  return _G.mem[ptr]
-end
-function _G.memgetshort(ptr)
-  return _G.mem[ptr+1]*256+_G.mem[ptr]
-end
-function _G.memgetint(ptr)
-  return  _G.mem[ptr+3]*16777216+_G.mem[ptr+2]*65536+_G.mem[ptr+1]*256+_G.mem[ptr]
-end
-
--- set pointers
-function _G.membyte(ptr, val)
-	_G.mem[ptr]=val%256
-	return _G.stack
-end
-
-function _G.memshort(ptr, val)
-	_G.mem[ptr]=val%256
-	_G.mem[ptr+1]=math.floor(val/256)%256
-	return _G.stack
-end
-
-function _G.memint(ptr, val)
-	_G.mem[ptr]=val%256
-	_G.mem[ptr+1]=math.floor(val/256)%256
-	_G.mem[ptr+2]=math.floor(val/65536)%256
-	_G.mem[ptr+3]=math.floor(val/16777216)%256
-	return _G.stack
-end
-
-
--- static memory
-function _G.smembyte(val)
-	_G.mem[_G.stack]=val%256
-	_G.stack=_G.stack+1
-	return _G.stack
-end
-function _G.smemshort(val)
-	_G.mem[_G.stack]=val%256
-	_G.mem[_G.stack+1]=math.floor(val/256)%256
-	_G.stack=_G.stack+2
-	return _G.stack-2
-end
-function _G.smemint(val)
-	_G.mem[_G.stack]=val%256
-	_G.mem[_G.stack+1]=math.floor(val/256)%256
-	_G.mem[_G.stack+2]=math.floor(val/65536)%256
-	_G.mem[_G.stack+3]=math.floor(val/16777216)%256
-	_G.stack=_G.stack+4
-	return _G.stack-4
-end
-
-
-function _G.smemstring(str)
-  local len = str:len()
-  for i=1, len do
-		_G.mem[_G.stack+i-1]=string.byte(string.sub(str,i,i))
+function _G.push(num, bytes)
+	for i=0, bytes-1 do
+    _G.mem[_G.stackptr]=num%256
+    num=math_floor(num/256)
+    _G.stackptr=_G.stackptr+1
   end
-	_G.stack=_G.stack+len+1
-	_G.mem[_G.stack-1]=0
-	return _G.stack-len-1
+  return _G.stackptr-bytes
 end
 
-function _G.kalloc(size)
-	for i = 0, size do
-		_G.mem[_G.heap+i+1]=0
+function _G.pop(bytes)
+  local num = 0;
+  for i=0, bytes-1 do
+    num=_G.mem[_G.stackptr]+256*i
+    _G.stackptr=_G.stackptr-1
+  end
+  return num
+end
+
+
+function _G.mov(a,b, sa, sb)
+
+  local power = 1
+  local num = 0;
+  for i=0, sb-1 do
+    num=num+_G.mem[b+i]*power
+    power=power*256
+  end
+	for i=0, sa-1 do
+		_G.mem[a+i]=num%256
+		num=math_floor(num/256)
 	end
-  _G.mem[_G.heap] = size
-	_G.heap=_G.heap+size+1;
-  return _G.heap-size
+	return a
 end
 
-function _G.kfree(ptr)
-  local allocsize = _G.mem[ptr-1]
-  for i=0, allocsize do
-    _G[ptr-1+i] = nil
+_G.accumulator = _G.push(0,8)
+function _G.addr(b)
+  local num = b;
+	for i=0, 8-1 do
+		_G.mem[_G.accumulator+i]=num%256
+		num=math_floor(num/256)
+	end
+	return _G.accumulator
+end
+
+function _G.deref(b)
+  local power = 1
+  local numptr = 0;
+  for i=0, 8-1 do
+    numptr=numptr+_G.mem[b+i]*power
+    power=power*256
   end
+
+	return numptr
 end
 
-function _G.getfunc(ptr)
-  return _G.mem[ptr]
+function _G.getnum(b, sb)
+  local power = 1
+	local numptr = 0;
+	for i=0, sb-1 do
+		numptr=numptr+_G.mem[b+i]*power
+    power=power*256
+	end
+
+	return numptr
+end
+
+
+function _G.add(a, b, sa, sb)
+  local power = 1
+	local numa = 0;
+  for i=0, sa-1 do
+    numa=numa+_G.mem[a+i]*power
+    power=power*256
+  end
+  power=1
+	local numb = 0;
+  for i=0, sb-1 do
+    numb=numb+_G.mem[b+i]*power
+    power=power*256
+	end
+  _G.addr(numa+numb)
+	return _G.accumulator
+end
+
+function _G.sub(a, b, sa, sb)
+  local power = 1
+	local numa = 0;
+  for i=0, sa-1 do
+    numa=numa+_G.mem[a+i]*power
+    power=power*256
+  end
+  power=1
+	local numb = 0;
+  for i=0, sb-1 do
+    numb=numb+_G.mem[b+i]*power
+    power=power*256
+	end
+  _G.addr(numa-numb)
+	return _G.accumulator
+end
+
+function _G.mul(a, b, sa, sb)
+  local power = 1
+	local numa = 0;
+  for i=0, sa-1 do
+    numa=numa+_G.mem[a+i]*power
+    power=power*256
+  end
+  power=1
+	local numb = 0;
+  for i=0, sb-1 do
+    numb=numb+_G.mem[b+i]*power
+    power=power*256
+	end
+  _G.addr(numa*numb)
+	return _G.accumulator
+end
+
+function _G.div(a, b, sa, sb)
+  local power = 1
+	local numa = 0;
+  for i=0, sa-1 do
+    numa=numa+_G.mem[a+i]*power
+    power=power*256
+  end
+  power=1
+	local numb = 0;
+  for i=0, sb-1 do
+    numb=numb+_G.mem[b+i]*power
+    power=power*256
+	end
+  _G.addr(numa/numb)
+	return _G.accumulator
 end

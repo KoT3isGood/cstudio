@@ -33,7 +33,7 @@
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {
-          "$path": "./src"
+          "$path": "../../converter/out"
         },
         "libc": {
           "$path": "../../libclua"

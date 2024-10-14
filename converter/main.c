@@ -20,226 +20,304 @@ typedef struct  {
 xliteral* literals;
 void makestrliteral(const char* decl) {
   xliteral* newlit = (xliteral*)malloc(sizeof(xliteral));
-  newlit->definition=(char*)malloc(strlen(decl)+26+12+1);
+  newlit->definition=(char*)malloc(strlen(decl)+128);
   sprintf(newlit->definition,"_G.lit_%i = _G.smemstring(%s)",litcount,decl);
   newlit->next = literals;
   literals = newlit;
 };
-void make32literal(int decl) {
+void makeintliteral(int decl, int size) {
   xliteral* newlit = (xliteral*)malloc(sizeof(xliteral));
-  newlit->definition=(char*)malloc(26+12+12);
-  sprintf(newlit->definition,"_G.lit_%i = _G.smemint(%i)",litcount,decl);
+  newlit->definition=(char*)malloc(128);
+  sprintf(newlit->definition,"_G.lit_%i = _G.push(%i,%i)",litcount,decl,size);
   newlit->next = literals;
   literals = newlit;
 };
-void make16literal(int decl) {
-  xliteral* newlit = (xliteral*)malloc(sizeof(xliteral));
-  newlit->definition=(char*)malloc(26+12+12);
-  sprintf(newlit->definition,"_G.lit_%i = _G.smemshort(%i)",litcount,decl);
-  newlit->next = literals;
-  literals = newlit;
-};
-void make8literal(int decl) {
-  xliteral* newlit = (xliteral*)malloc(sizeof(xliteral));
-  newlit->definition=(char*)malloc(26+12+12);
-  sprintf(newlit->definition,"_G.lit_%i = _G.smembyte(%i)",litcount,decl);
-  newlit->next = literals;
-  literals = newlit;
-};
-bool isCompounded = false;
-enum CXChildVisitResult compound( CXCursor cursor, CXCursor parent, CXClientData clientData) {
-  enum CXCursorKind kind = clang_getCursorKind(cursor);
-  isCompounded = false;
-  if (kind==CXCursor_CompoundStmt) {
-    isCompounded = true;
-  }
-  if (kind==CXCursor_ParmDecl) {
-    return CXChildVisit_Continue;
-  }
+
+
+bool found=0;
+int bytesa=0;
+int bytesb=0;
+int totaltofind=0;
+enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientData clientData);
+
+
+FILE* fout;
+enum CXChildVisitResult traverseifchild( CXCursor cursor, CXCursor parent, CXClientData clientData) {
+  clang_visitChildren(cursor,traverseany,clientData);
   return CXChildVisit_Break;
 }
 
-FILE* fout;
-enum CXChildVisitResult visitor( CXCursor cursor, CXCursor parent, CXClientData clientData)
-{
-  if (numtoskip) {
-    numtoskip--;
-    return CXChildVisit_Recurse; 
-  } 
+enum CXChildVisitResult getsizes( CXCursor cursor, CXCursor parent, CXClientData clientData) {
+  CXType type = clang_getCursorType(cursor);
+  int sz = clang_Type_getSizeOf(type);
+  if (totaltofind==2) {
+    bytesa = sz;
+  } else if (totaltofind==1) {
+    bytesb = sz;
+  }
+  totaltofind--;
+  return CXChildVisit_Continue;
+}
 
+enum CXChildVisitResult lookforcompound( CXCursor cursor, CXCursor parent, CXClientData clientData) {
+  enum CXCursorKind kind = clang_getCursorKind(cursor);
+  found = 0;
+  if (kind==CXCursor_CompoundStmt) {
+    found = 1;
+    return CXChildVisit_Break;
+  }
   
+  return CXChildVisit_Continue;
+
+}
+
+enum CXChildVisitResult lookforbinaryop( CXCursor cursor, CXCursor parent, CXClientData clientData) {
+  enum CXCursorKind kind = clang_getCursorKind(cursor);
+  found = 0;
+  if (kind==CXCursor_BinaryOperator) {
+    found = 1;
+    return CXChildVisit_Break;
+  }
+  return CXChildVisit_Continue;
+}
+char* rs = 0;
+enum CXChildVisitResult lookfordeclref( CXCursor cursor, CXCursor parent, CXClientData clientData) {
+  enum CXCursorKind kind = clang_getCursorKind(cursor);
+  CXString sname = clang_getCursorSpelling(cursor);
+
+  found = 0;
+  if (kind==CXCursor_DeclRefExpr) {
+    found = 1;
+    rs=clang_getCString(sname);
+  }
+}
+int mode = 0;
+
+CXCursor lastCursor;
+
+enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientData clientData)
+{
   CXSourceLocation location = clang_getCursorLocation( cursor );
 
   CXString sname = clang_getCursorSpelling(cursor);
   CXString skind = clang_getCursorKindSpelling(cursor.kind);
   enum CXCursorKind kind = clang_getCursorKind(cursor);
-  
-  for(int i = 0;i<(int)clientData;i++) {
-    printf("  ");
-  } 
-  printf("%i, %s: %s\n",clientData, clang_getCString(skind), clang_getCString(sname));
 
-  
-  int num_args = clang_Cursor_getNumArguments(cursor);
-  CXEvalResult res = clang_Cursor_Evaluate(cursor);
-
-  int cd = (int)clientData;
-
-  switch (kind) {
-  case CXCursor_CallExpr:
-  case CXCursor_DeclRefExpr:
-  case CXCursor_StringLiteral:
-  case CXCursor_FloatingLiteral:
-  case CXCursor_IntegerLiteral:
-    if (cd==-1) {
-    if (!skipcomma) {
-      fprintf(fout,", ");
-    }
-    skipcomma = false;
-  }
-  break;
-  case CXCursor_CompoundStmt:
-    printf("%i\n",cd);
-    if (cd==-1) {
-      fprintf(fout,") then \n");
-    }
-    break;
-  default:
-    break;
-  }
-
-   
-  switch (kind) {
-  case CXCursor_FunctionDecl:
-    clang_visitChildren( cursor, compound, 0);
-    //printf("func %s, num_args: %i\n",clang_getCString(sname),num_args);
-
-    if (isCompounded) {
-      //fprintf(fout, "if _G.%s==nil then\n",clang_getCString(sname));
-      fprintf(fout,"function _G.%s(",clang_getCString(sname));
-
-
-            for (int i = 0; i < num_args; ++i) {
-        CXCursor arg_cursor = clang_Cursor_getArgument(cursor, i);
-        CXString arg_name = clang_getCursorSpelling(arg_cursor);
-        CXType arg_type = clang_getCursorType(arg_cursor);
-
-        if (i!=0) {
-          fprintf(fout, ", ");
-        }
-        fprintf(fout, "%s", clang_getCString(arg_name));
-        clang_disposeString(arg_name);
-      }
-      fprintf(fout,")\n");
-      clang_visitChildren( cursor, visitor, (void*)((int)clientData+1));
-      //fprintf(fout,"end\n");
-    }
-    
+  if (kind==CXCursor_UnexposedExpr) return CXChildVisit_Recurse;
+  if (numtoskip>0) {
+    numtoskip--;
     return CXChildVisit_Continue;
-    
+    //goto cont;
+  }
 
-  case CXCursor_VarDecl:
+  if ((int)clientData==-1) {
+    if (mode == 0) {
+      fprintf(fout, ", ");
+    }
+    if (mode == 1) {
+      mode = 0;
+    }
+  }
+  int lastmode = mode;
+  mode = lastmode;
+  printf("%i\n",lastmode);
+
+  int next = (int)clientData+1;
+  
+  //for(int i = 0;i<(int)clientData;i++) {printf("  ");};
+
+
+  printf("%s\n", clang_getCString(skind));
+
+  if (kind==CXCursor_CompoundStmt) {
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    goto cont; 
+  }
+
+  if (kind==CXCursor_VarDecl) {
     CXType type = clang_getCursorType(cursor);
     int sz = clang_Type_getSizeOf(type);
-    if (sz==1) {
-      make8literal(0);
-      fprintf(fout, "_G.membyte(_G.lit_%i,_G.memgetbyte(",litcount);
 
-    }
-    if (sz==2) {
-      make16literal(0);
-      fprintf(fout, "_G.memshort(_G.lit_%i,_G.memgetshort(",litcount);
-    }
-    if (sz==4) {
-      make32literal(0);
-      fprintf(fout, "_G.memint(_G.lit_%i,_G.memgetint(",litcount);
-    }
+
+    fprintf(fout,"local %s = _G.lit_%i\n",clang_getCString(sname),litcount);
+    makeintliteral(0,sz);
+    //clang_visitChildren(cursor,traverseany,(CXClientData)next);
     litcount++;
-    // get what it equals to
-    clang_visitChildren( cursor, visitor, (void*)(int)clientData+1);
 
-    fprintf(fout, "))\n"); 
-    return CXChildVisit_Continue;
+    goto cont;
+  }
+  if (kind==CXCursor_DeclStmt) {
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    goto cont;
+  }
+  if (kind==CXCursor_DeclRefExpr) {
 
-  case CXCursor_CallExpr:
-    fprintf(fout, "_G.%s(",clang_getCString(sname)); 
-    num_args = clang_Cursor_getNumArguments(cursor);
-    // first 2 of them are garbage
-    numtoskip=2;
-    // idk how to make it not write a comma at first
-    skipcomma = true;
-    clang_visitChildren( cursor, visitor, (void*)(int)-1);
-
-    fprintf(fout, ")\n"); 
-    return CXChildVisit_Continue;
-
-  case CXCursor_DeclRefExpr:
-    fprintf(fout, "%s", clang_getCString(sname));
-    break;
-
-
-  case CXCursor_StringLiteral:
-    fprintf(fout, "_G.lit_%i",litcount);
-    makestrliteral(clang_getCString(sname));
-    litcount++;
-    break;
-  case CXCursor_IntegerLiteral:
-    int value = clang_EvalResult_getAsInt(res);
-    make32literal(value);
-    fprintf(fout,"_G.lit_%i",litcount);
-    litcount++;
-    clang_EvalResult_dispose(res);
-
-    break;
-  case CXCursor_CharacterLiteral:
-    int valuec = clang_EvalResult_getAsInt(res);
-    make8literal(valuec);
-    fprintf(fout,"_G.lit_%i",litcount);
-    litcount++;
-    clang_EvalResult_dispose(res);
-    break; 
-
-  case CXCursor_FloatingLiteral:
-    double value2 = clang_EvalResult_getAsDouble(res);
-    int valuei = *(int*)&value2;
-    fprintf(fout,"_G.lit_%i)",litcount);
-    make32literal(valuei);
-    litcount++;
-    clang_EvalResult_dispose(res);
-    break;
-
-  case CXCursor_ReturnStmt:
-
-    fprintf(fout, "\nreturn "); 
-    clang_visitChildren( cursor, visitor, (void*)((int)clientData+1));
-
-    return CXChildVisit_Continue;
-
-  case CXCursor_CompoundStmt:
-    clang_visitChildren( cursor, visitor, (void*)((int)clientData+1));
-    fprintf(fout, "\nend\n"); 
-
-    return CXChildVisit_Continue;
-
-  case CXCursor_IfStmt:
-    fprintf(fout,"if(");
-
-    clang_visitChildren( cursor, visitor, (void*)(int)-1);
-    return CXChildVisit_Continue;
-  case CXCursor_BinaryOperator:
-    enum CXBinaryOperatorKind bk = clang_getCursorBinaryOperatorKind(cursor);
-    CXString bks = clang_getBinaryOperatorKindSpelling(bk);
-    printf("%s\n",clang_getCString(bks));
-    clang_visitChildren( cursor, visitor, (void*)((int)clientData+1));
-    return CXChildVisit_Continue;
-
-
-
-  default:
-    break;
+    fprintf(fout,"%s",clang_getCString(sname));
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    goto cont;
   }
 
-  return CXChildVisit_Recurse; 
+
+  if (kind==CXCursor_FunctionDecl) {
+
+
+    found = 0;
+    clang_visitChildren(cursor,lookforcompound, (CXClientData)next);
+    if (!found) {
+      goto cont; 
+    }
+
+
+    fprintf(fout,"function _G.%s(",clang_getCString(sname));
+    int num_args = clang_Cursor_getNumArguments(cursor);
+    for (int i = 0; i < num_args; ++i) {
+      CXCursor arg_cursor = clang_Cursor_getArgument(cursor, i);
+      CXString arg_name = clang_getCursorSpelling(arg_cursor);
+      CXType arg_type = clang_getCursorType(arg_cursor);
+
+      printf("  Arg %d: %s (%s)\n", i + 1, 
+      clang_getCString(arg_name),
+      clang_getCString(clang_getTypeSpelling(arg_type)));
+
+      clang_disposeString(arg_name);
+      clang_disposeString(clang_getTypeSpelling(arg_type));
+    }
+    fprintf(fout, ")\n");
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    fprintf(fout, "\nend\n");
+
+    goto cont; 
+  };
+
+  if (kind==CXCursor_ReturnStmt) {
+    fprintf(fout,"return ");
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    fprintf(fout,"\n");
+    goto cont; 
+  }
+  if (kind==CXCursor_ParenExpr) {
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    goto cont; 
+  }
+
+  if (kind==CXCursor_IfStmt) {
+    fprintf(fout,"if (_G.getnum(");
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+    
+    totaltofind=1;
+    clang_visitChildren(cursor,getsizes,0);
+    fprintf(fout,", %i)~=0) then\n",bytesb);
+    numtoskip=1;
+
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+    fprintf(fout,"else\n");
+
+    numtoskip=2;
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+
+    fprintf(fout,"end\n");
+    mode = 0;
+    goto cont; 
+
+  }
+  if (kind==CXCursor_WhileStmt) {
+    totaltofind=1;
+    clang_visitChildren(cursor,getsizes,0);
+
+
+    fprintf(fout,"while(_G.getnum(");
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+    mode = 0;
+    fprintf(fout,", %i)~=0) do\n",bytesb);
+    numtoskip=1;
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+
+    mode = 0;
+    fprintf(fout,"end\n");
+    goto cont; 
+  }
+
+  if (kind==CXCursor_BinaryOperator) {
+    enum CXBinaryOperatorKind kind = clang_getCursorBinaryOperatorKind(cursor);
+    totaltofind=2;
+    clang_visitChildren(cursor,getsizes,(CXClientData)-1);
+
+    int biggestsz = bytesa>bytesa ? bytesa : bytesb;
+
+    if (kind==CXBinaryOperator_Assign) {
+       fprintf(fout,"_G.mov(",litcount);
+       //litcount++;
+       mode = 1;
+       clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+       fprintf(fout, ", %i, %i)\n", bytesa,bytesb);
+    }
+
+    if (kind==CXBinaryOperator_Sub) {
+      fprintf(fout,"_G.sub(");
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,", %i, %i)",biggestsz,bytesa,bytesb);
+    }
+    else if (kind==CXBinaryOperator_Mul) {
+      fprintf(fout,"_G.mul(");
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,", %i, %i)",biggestsz,bytesa,bytesb);
+    }
+    else if (kind==CXBinaryOperator_Add) {
+      fprintf(fout,"_G.add(");
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,", %i, %i)",biggestsz,bytesa,bytesb);
+    } 
+
+
+    goto cont; 
+  }
+  if (kind==CXCursor_UnaryOperator) {
+    enum CXUnaryOperatorKind kind = clang_getCursorUnaryOperatorKind(cursor);
+    CXString opname = clang_getUnaryOperatorKindSpelling(kind);
+    //printf("%s\n",clang_getCString(opname));
+
+    if (kind==CXUnaryOperator_AddrOf) {
+      fprintf(fout,"_G.addr(");
+      clang_visitChildren(cursor,traverseany,(CXClientData)next);
+      fprintf(fout,")");
+    }
+    if (kind==CXUnaryOperator_Deref) {
+      fprintf(fout,"_G.deref(");
+      clang_visitChildren(cursor,traverseany,(CXClientData)next);
+      fprintf(fout,")");
+    }
+    goto cont;  
+  }
+  if (kind==CXCursor_IntegerLiteral) {
+    CXType type = clang_getCursorType(cursor);
+    int sz = clang_Type_getSizeOf(type);
+    CXEvalResult res = clang_Cursor_Evaluate(cursor);
+    int value = clang_EvalResult_getAsInt(res);
+    makeintliteral(value,sz);
+    fprintf(fout, "_G.lit_%i", litcount);
+    litcount++;
+    goto cont;  
+  }
+  return CXChildVisit_Recurse;
+cont:
+  mode = lastmode; 
+  if (mode==2&&(int)clientData==-1) {
+      lastCursor = cursor;
+      return CXChildVisit_Break;
+  }
+  return CXChildVisit_Continue;
+
 }
 
 //#define TESTING
@@ -250,7 +328,7 @@ int main(int argc, char** argv) {
     printf("argc is less than 2\n");
     return -2;
   }
-  const char* outputfile = "compiled.client.lua";
+  const char* outputfile = "out/compiled.client.lua";
   fout = fopen(outputfile,"w");
   fclose(fout);
 
@@ -273,7 +351,7 @@ int main(int argc, char** argv) {
     }
 
     CXCursor root = clang_getTranslationUnitCursor(unit);
-    clang_visitChildren(root,visitor,0);
+    clang_visitChildren(root,traverseany,0);
     clang_disposeTranslationUnit(unit);
   }
 
@@ -282,6 +360,16 @@ int main(int argc, char** argv) {
   for(xliteral* lit = literals; lit;lit=lit->next) {
     fprintf(fout, "%s\n",lit->definition);
   }
+  fprintf(fout,
+"print(\"started\")\n"
+"local out = _G.main()\n"
+"print(\"ended\")\n"
+"local num = 0\n"
+"for i=0, 4-1 do\n"
+"num=num+_G.mem[out+i]*math.pow(256,i)\n"
+"end\n"
+"print(num)\n"
+  );
 
   fclose(fout);
 

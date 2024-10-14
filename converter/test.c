@@ -1,8 +1,9 @@
-
 #include "../libc/assert.h"
-
 int main() {
-  short test = 123;
-  assert(0);
-  return 65;
+	int x;
+
+	x = 1000000;
+	while (x)
+		x = x - 1;
+	return x;
 }
