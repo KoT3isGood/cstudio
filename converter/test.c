@@ -1,8 +1,11 @@
-int main() {
+int
+main()
+{
 	int x;
+	
+	x = 1;
+  for (x=0;x<10;x=x+1) {
 
-	x = 10000;
-	while (x-100)
-		x = x - 1;
-	return 10;
+  }
+  return x;
 }

@@ -120,14 +120,14 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
   }
   int lastmode = mode;
   mode = lastmode;
-  //printf("%i\n",lastmode);
+ // printf("%i\n",lastmode);
 
   int next = (int)clientData+1;
   
   //for(int i = 0;i<(int)clientData;i++) {printf("  ");};
 
 
-  //printf("%s\n", clang_getCString(skind));
+  printf("%s\n", clang_getCString(skind));
   if(kind ==CXCursor_CallExpr) {
     numtoskip = 1;
     mode = 1;
@@ -230,6 +230,19 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
     goto cont; 
 
   }
+  if (kind==CXCursor_ForStmt) { 
+    numtoskip = 0;
+    //mode = 2;
+    //fprintf(fout, "init: ");
+
+    fprintf(fout,"\nwhile() do\n");
+    
+    clang_visitChildren(cursor,traverseany,(CXClientData)1);
+
+    fprintf(fout,"end\n");
+    goto cont;
+  }
+
   if (kind==CXCursor_WhileStmt) {
     totaltofind=1;
     clang_visitChildren(cursor,getsizes,0);
@@ -277,7 +290,22 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
       clang_visitChildren(cursor,traverseany,(CXClientData)-1);
       mode = 0;
       fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_Div) {
+      fprintf(fout,"_G.div%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_And) {
+      fprintf(fout,"_G.band%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
     } 
+
 
 
     else if (kind==CXBinaryOperator_Add) {
