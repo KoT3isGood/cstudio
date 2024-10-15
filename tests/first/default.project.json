@@ -4,8 +4,8 @@
     "$className": "DataModel",
     "Lighting": {
       "$properties": {
-        "Outlines": false,
         "Technology": "Voxel",
+        "Outlines": false,
         "Ambient": [
           0.0,
           0.0,
@@ -13,16 +13,6 @@
         ],
         "GlobalShadows": true,
         "Brightness": 2.0
-      }
-    },
-    "ReplicatedStorage": {
-      "Shared": {
-        "$path": "./common"
-      }
-    },
-    "ServerScriptService": {
-      "Server": {
-        "$path": "./server"
       }
     },
     "SoundService": {

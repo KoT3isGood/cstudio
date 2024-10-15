@@ -4,4 +4,6 @@ zig-out/
 
 /first.rbxlx
 /*.rbxlx.lock
+/*.rbxlx.lock
 /*.rbxl.lock
+/*.rbxlx.lock
