@@ -49,7 +49,22 @@ enum CXChildVisitResult traverseifchild( CXCursor cursor, CXCursor parent, CXCli
 
 enum CXChildVisitResult getsizes( CXCursor cursor, CXCursor parent, CXClientData clientData) {
   CXType type = clang_getCursorType(cursor);
+
+
   int sz = clang_Type_getSizeOf(type);
+
+  if (clang_getCursorKind(cursor) == CXCursor_DeclRefExpr) {
+    CXSourceRange range = clang_getCursorExtent(cursor);
+    CXSourceLocation startLoc = clang_getRangeStart(range);
+    CXSourceLocation endLoc = clang_getRangeEnd(range);
+
+    unsigned startOffset, endOffset;
+    clang_getExpansionLocation(startLoc, NULL, NULL, NULL, &startOffset);
+    clang_getExpansionLocation(endLoc, NULL, NULL, NULL, &endOffset);
+
+    sz = endOffset - startOffset;
+  }
+  printf("sz:%i\n",sz);
   if (totaltofind==2) {
     bytesa = sz;
   } else if (totaltofind==1) {
@@ -120,20 +135,25 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
   }
   int lastmode = mode;
   mode = lastmode;
- // printf("%i\n",lastmode);
+  //printf("%i\n",lastmode);
 
   int next = (int)clientData+1;
   
-  //for(int i = 0;i<(int)clientData;i++) {printf("  ");};
+  for(int i = 0;i<(int)clientData;i++) {printf("  ");};
 
 
   printf("%s\n", clang_getCString(skind));
-  if(kind ==CXCursor_CallExpr) {
+
+  if (kind==CXCursor_CallExpr) {
+    fprintf(fout,"_G.%s(",clang_getCString(sname));
     numtoskip = 1;
-    mode = 1;
+    mode = -1;
     clang_visitChildren(cursor,traverseany,(CXClientData)-1);
-    goto cont;
+    fprintf(fout,")");
+    goto cont; 
   }
+
+
   if (kind==CXCursor_CompoundStmt) {
     clang_visitChildren(cursor,traverseany,(CXClientData)next);
     goto cont; 
@@ -195,6 +215,10 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
 
     goto cont; 
   };
+  if (kind==CXCursor_ParenExpr) {
+    clang_visitChildren(cursor,traverseany,(CXClientData)next);
+    goto cont; 
+  }
 
   if (kind==CXCursor_ReturnStmt) {
     fprintf(fout,"return ");
@@ -202,11 +226,6 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
     fprintf(fout,"\n");
     goto cont; 
   }
-  if (kind==CXCursor_ParenExpr) {
-    clang_visitChildren(cursor,traverseany,(CXClientData)next);
-    goto cont; 
-  }
-
   if (kind==CXCursor_IfStmt) {
     fprintf(fout,"if (_G.getnum(");
     mode = 2;
@@ -230,14 +249,27 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
     goto cont; 
 
   }
-  if (kind==CXCursor_ForStmt) { 
-    numtoskip = 0;
-    //mode = 2;
-    //fprintf(fout, "init: ");
+  if (kind==CXCursor_ForStmt) {
+    enum CXBinaryOperatorKind kind = clang_getCursorBinaryOperatorKind(cursor);
+    totaltofind=2;
+    clang_visitChildren(cursor,getsizes,(CXClientData)-1);
 
-    fprintf(fout,"\nwhile() do\n");
-    
-    clang_visitChildren(cursor,traverseany,(CXClientData)1);
+    numtoskip = 0;
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+
+    fprintf(fout,"\nwhile(_G.getnum%i(",bytesb);
+    numtoskip = 1;
+    mode = 2;
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+    fprintf(fout,")~=0) do\n");
+    numtoskip = 3;
+    mode = 2; 
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+
+    numtoskip = 2;
+    mode = 2; 
+    clang_visitChildren(cursor,traverseany,(CXClientData)-1);
 
     fprintf(fout,"end\n");
     goto cont;
@@ -267,7 +299,10 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
     totaltofind=2;
     clang_visitChildren(cursor,getsizes,(CXClientData)-1);
 
-    int biggestsz = bytesa>bytesa ? bytesa : bytesb;
+    printf("a:%i\n",bytesa);
+    printf("a:%i\n",bytesb);
+
+    int biggestsz = bytesa>bytesb ? bytesa : bytesb;
 
     if (kind==CXBinaryOperator_Assign) {
        fprintf(fout,"_G.mov%i_%i(",bytesa,bytesb);
@@ -276,7 +311,13 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
        clang_visitChildren(cursor,traverseany,(CXClientData)-1);
        fprintf(fout, ")\n");
     }
-
+    if (kind==CXBinaryOperator_Add) {
+      fprintf(fout,"_G.add%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    } 
     if (kind==CXBinaryOperator_Sub) {
       fprintf(fout,"_G.sub%i_%i(",bytesa,bytesb);
       mode = 1;
@@ -305,17 +346,62 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
       mode = 0;
       fprintf(fout,")");
     } 
-
-
-
-    else if (kind==CXBinaryOperator_Add) {
-      fprintf(fout,"_G.add%i_%i(",bytesa,bytesb);
+    if (kind==CXBinaryOperator_Or) {
+      fprintf(fout,"_G.bxor%i_%i(",bytesa,bytesb);
       mode = 1;
       clang_visitChildren(cursor,traverseany,(CXClientData)-1);
       mode = 0;
       fprintf(fout,")");
     } 
-
+    if (kind==CXBinaryOperator_Xor) {
+      fprintf(fout,"_G.bxor%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_EQ) {
+      fprintf(fout,"_G.leq%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_NE) {
+      fprintf(fout,"_G.lne%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_LT) {
+      fprintf(fout,"_G.llt%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_GT) {
+      fprintf(fout,"_G.lgt%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_LE) {
+      fprintf(fout,"_G.lle%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
+    if (kind==CXBinaryOperator_GE) {
+      fprintf(fout,"_G.lge%i_%i(",bytesa,bytesb);
+      mode = 1;
+      clang_visitChildren(cursor,traverseany,(CXClientData)-1);
+      mode = 0;
+      fprintf(fout,")");
+    }
 
     goto cont; 
   }
@@ -342,6 +428,15 @@ enum CXChildVisitResult traverseany( CXCursor cursor, CXCursor parent, CXClientD
     CXEvalResult res = clang_Cursor_Evaluate(cursor);
     int value = clang_EvalResult_getAsInt(res);
     makeintliteral(value,sz);
+    fprintf(fout, "_G.lit_%i", litcount);
+    litcount++;
+    goto cont;  
+  }
+  if (kind==CXCursor_CharacterLiteral) {
+    CXType type = clang_getCursorType(cursor);
+    CXEvalResult res = clang_Cursor_Evaluate(cursor);
+    int value = clang_EvalResult_getAsInt(res);
+    makeintliteral(value,4);
     fprintf(fout, "_G.lit_%i", litcount);
     litcount++;
     goto cont;  

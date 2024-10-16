@@ -15,7 +15,7 @@ int isgraph(int c) {
 
 };
 int islower(int c) {
-
+  return (c>='a')&(c<='z');
 };
 int isprint(int c) {
 
@@ -27,7 +27,7 @@ int isspace(int c) {
 
 };
 int isupper(int c) {
-
+  return (c>='A')&(c<='Z');
 };
 int isxdigit(int c) {
 
